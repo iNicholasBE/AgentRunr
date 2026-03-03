@@ -25,7 +25,8 @@ public class SetupInterceptor implements HandlerInterceptor {
         // Always allow: setup page, API endpoints, static resources
         if (path.startsWith("/setup") || path.startsWith("/api/") ||
             path.startsWith("/css/") || path.startsWith("/js/") ||
-            path.equals("/favicon.ico")) {
+            path.equals("/favicon.ico") || path.endsWith(".png") ||
+            path.endsWith(".jpg") || path.endsWith(".svg") || path.endsWith(".ico")) {
             return true;
         }
 
