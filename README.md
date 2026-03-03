@@ -13,13 +13,16 @@
 
 AgentRunr is an AI agent framework for Java. It ports [OpenAI Swarm](https://github.com/openai/swarm)'s lightweight agent orchestration pattern to the JVM, backed by Spring Boot for dependency injection, Spring AI for LLM abstraction, and JobRunr for persistent distributed task scheduling.
 
+Inspired by [OpenClaw](https://openclaw.ai) — a Node.js-based personal AI agent runtime — AgentRunr brings the same idea to the Java ecosystem: a self-hosted, file-aware agent that knows who it is, remembers what matters, and can schedule its own tasks.
+
 **Key differentiators:**
 - **Persistent memory** — SQLite with FTS5 full-text search, automatic fact extraction, and memory-aware system prompts
 - **Soul & Identity** — Agents boot with personality files (SOUL.md, IDENTITY.md) assembled into rich system prompts
 - **MCP integration** — Generic multi-server config supporting SSE and stdio transports with custom auth headers
 - **Distributed scheduling** — JobRunr-powered cron jobs and heartbeat tasks that survive restarts
 - **Multi-channel** — REST API, SSE streaming, Telegram bot, and web UI from a single codebase
-- **Multi-model** — Route requests to OpenAI, Anthropic, or Ollama per-request with automatic fallback
+- **Multi-model** — Route requests to OpenAI, Anthropic, Mistral, or Ollama per-request with automatic fallback
+- **Claude Code OAuth** — Auto-detects Claude Code credentials from system keychain (no manual key needed)
 
 ## Tech Stack
 
@@ -37,8 +40,8 @@ AgentRunr is an AI agent framework for Java. It ports [OpenAI Swarm](https://git
 
 ```bash
 # 1. Clone and build
-git clone https://github.com/iNicholasBE/agentrunr.git
-cd agentrunr
+git clone https://github.com/iNicholasBE/AgentRunr.git
+cd AgentRunr
 
 # 2. Set Java 21
 export JAVA_HOME=/path/to/java-21
@@ -46,7 +49,7 @@ export PATH=$JAVA_HOME/bin:$PATH
 
 # 3. Configure (choose one method)
 
-# Option A: Interactive setup
+# Option A: Interactive setup (CLI)
 mvn spring-boot:run -Dspring-boot.run.arguments="--setup"
 
 # Option B: Web setup
@@ -61,6 +64,28 @@ curl -X POST http://localhost:8090/api/chat \
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "Hello!"}]}'
 ```
+
+## File Layout
+
+AgentRunr uses two separate directories so your workspace files stay clean and credentials stay private:
+
+```
+~/.agentrunr/
+└── credentials.enc          # AES-256-GCM encrypted API keys and config
+
+~/agentrunr-workspace/       # Default path, configurable during setup
+├── SOUL.md                  # Agent personality and values
+├── IDENTITY.md              # Technical capabilities and tool awareness
+├── HEARTBEAT.md             # Periodic task checklist
+├── tasks/                   # Scheduled task definitions
+└── memory/                  # Session logs (managed by FileMemoryStore)
+    └── {sessionId}/
+        └── 2026-01-15.md    # Daily conversation log
+```
+
+The workspace path can be customised during setup. Credentials are always stored in `~/.agentrunr/credentials.enc` regardless of workspace location.
+
+On first run, `WorkspaceInitializer` copies default `SOUL.md`, `IDENTITY.md`, and `HEARTBEAT.md` templates into the workspace (existing files are never overwritten).
 
 ## Architecture
 
@@ -77,7 +102,7 @@ curl -X POST http://localhost:8090/api/chat \
 │              │                                                       │
 │  Agent Core  │   AgentRunner ─── LLM loop ─── tool calls ─── recurse│
 │  (Swarm)     │       │                                               │
-│              │   ModelRouter ─── OpenAI / Anthropic / Ollama         │
+│              │   ModelRouter ─── OpenAI / Anthropic / Mistral / Ollama│
 │              │       │                                               │
 │              │   SystemPromptBuilder ─── SOUL.md + IDENTITY.md       │
 │              │       │                    + memory context            │
@@ -92,7 +117,7 @@ curl -X POST http://localhost:8090/api/chat \
 │              │                                                       │
 │  Memory      │   SQLiteMemoryStore ─── brain.db (FTS5)              │
 │              │       │                                               │
-│              │   FileMemoryStore ─── daily logs + MEMORY.md          │
+│              │   FileMemoryStore ─── daily logs per session          │
 │              │       │                                               │
 │              │   MemoryAutoSaver ─── passive fact extraction         │
 │              │       │                                               │
@@ -156,11 +181,22 @@ Route requests to different LLM providers per-request:
 # Anthropic
 {"model": "anthropic:claude-sonnet-4-20250514"}
 
+# Mistral
+{"model": "mistral:mistral-medium-latest"}
+
 # Ollama (local)
 {"model": "ollama:llama3.2"}
 ```
 
 `ModelRouter` uses `@Nullable` injection — each provider is optional. Configure only what you need.
+
+#### Claude Code OAuth (Anthropic, no key needed)
+
+If you have [Claude Code](https://claude.ai/code) installed and authenticated (`claude auth login`), AgentRunr will automatically pick up your OAuth token from the system keychain — no `ANTHROPIC_API_KEY` required.
+
+- **macOS:** reads from the macOS Keychain via `security find-generic-password`
+- **Linux:** reads from `~/.claude/.credentials.json`
+- Tokens are refreshed automatically when they expire
 
 ### Memory System
 
@@ -177,9 +213,8 @@ AgentRunr has a dual-layer persistent memory system:
 - **Database:** `./data/memory/brain.db`
 
 #### File Memory Store (Secondary)
-- **Daily conversation logs** — Markdown files at `sessions/{id}/yyyy-MM-dd.md`
+- **Daily conversation logs** — Markdown files at `{workspace}/memory/{sessionId}/yyyy-MM-dd.md`
 - **Context persistence** — Session variables saved as `context.json`
-- **Long-term memory** — Curated notes in `MEMORY.md`
 
 #### Automatic Fact Extraction
 
@@ -207,10 +242,10 @@ The agent can explicitly manage memory through four tools:
 
 ### Soul & Identity System
 
-At startup, `SystemPromptBuilder` assembles a rich system prompt from identity files:
+At startup, `SystemPromptBuilder` assembles a rich system prompt from identity files in the workspace:
 
 ```
-workspace/
+~/agentrunr-workspace/
 ├── SOUL.md       # Personality, values, behavioral guidelines
 ├── IDENTITY.md   # Technical capabilities, tool awareness
 ├── USER.md       # User-specific preferences and context
@@ -309,7 +344,7 @@ When multiple sources provide tools, execution priority is:
 | `web_fetch` | Fetch URLs with redirect following and size limits |
 
 **Security features:**
-- Workspace sandboxing — tools restricted to `./workspace` by default
+- Workspace sandboxing — tools restricted to the configured workspace directory
 - Dangerous command blocking — prevents `rm -rf /`, fork bombs, `dd` to devices
 - Path traversal prevention — validates all file paths
 - Output size limits — prevents memory exhaustion (64KB default)
@@ -333,7 +368,7 @@ agent:
   heartbeat:
     enabled: true
     interval-minutes: 30
-    file: ./HEARTBEAT.md
+    file: ./workspace-defaults/HEARTBEAT.md
 ```
 
 #### Cron Jobs
@@ -405,9 +440,13 @@ Interactive credential management inspired by Claude Code's setup flow:
 | `OPENAI_API_KEY` | OpenAI API key | At least one provider |
 | `ANTHROPIC_API_KEY` | Anthropic API key | Optional |
 | `ANTHROPIC_ENABLED` | Enable Anthropic (`true`) | With API key |
+| `MISTRAL_API_KEY` | Mistral AI API key | Optional |
+| `MISTRAL_ENABLED` | Enable Mistral (`true`) | With API key |
 | `OLLAMA_BASE_URL` | Ollama server URL | Optional |
 | `OLLAMA_MODEL` | Default Ollama model | Optional |
 | `OLLAMA_ENABLED` | Enable Ollama (`true`) | With base URL |
+
+> **Claude Code OAuth:** If you have Claude Code installed and authenticated (`claude auth login`), Anthropic access is automatic — no `ANTHROPIC_API_KEY` needed.
 
 ### Channels
 
@@ -424,7 +463,7 @@ Interactive credential management inspired by Claude Code's setup flow:
 |----------|---------|-------------|
 | `BRAVE_API_KEY` | — | Brave Search API key for `web_search` |
 | `TOOLS_RESTRICT_WORKSPACE` | `true` | Sandbox file/shell tools to workspace |
-| `TOOLS_WORKSPACE` | `./workspace` | Workspace directory path |
+| `TOOLS_WORKSPACE` | `~/agentrunr-workspace` | Workspace directory path |
 | `TOOLS_SHELL_TIMEOUT` | `30` | Shell command timeout in seconds |
 | `TOOLS_MAX_OUTPUT` | `65536` | Maximum tool output size in bytes |
 
@@ -440,7 +479,7 @@ Interactive credential management inspired by Claude Code's setup flow:
 |----------|---------|-------------|
 | `HEARTBEAT_ENABLED` | `true` | Enable heartbeat polling |
 | `HEARTBEAT_INTERVAL` | `30` | Heartbeat check interval (minutes) |
-| `HEARTBEAT_FILE` | `./HEARTBEAT.md` | Heartbeat task file path |
+| `HEARTBEAT_FILE` | `./workspace-defaults/HEARTBEAT.md` | Heartbeat task file path |
 
 ### Server
 
@@ -493,6 +532,12 @@ GET    /api/mcp/servers
 POST   /api/mcp/servers    {"name": "...", "url": "...", "authHeader": "...", "authValue": "..."}
 DELETE /api/mcp/servers/{name}
 
+# Cron jobs
+GET    /api/cron
+POST   /api/cron
+DELETE /api/cron/{id}
+POST   /api/cron/{id}/run
+
 # Telegram settings
 GET  /api/telegram/settings
 PUT  /api/telegram/settings    {"token": "...", "allowedUsers": "..."}
@@ -514,7 +559,7 @@ GET  /api/health
 export JAVA_HOME=/path/to/java-21
 export PATH=$JAVA_HOME/bin:$PATH
 
-# Build and run all 251 tests
+# Build and run all tests
 mvn clean verify
 
 # Run with debug logging
@@ -533,23 +578,32 @@ io.agentrunr
 │   ├── AgentResult.java               # Tool execution result
 │   ├── AgentResponse.java             # Complete run response
 │   ├── ChatMessage.java               # Message record (role + content)
+│   ├── ConversationHistory.java       # Conversation context management
 │   ├── SystemPromptBuilder.java       # Assembles identity + memory + tools + safety
 │   └── ToolRegistry.java             # Central tool registration (3 tiers)
 ├── config/
 │   ├── ModelRouter.java               # Per-request provider routing
+│   ├── OpenAiConfig.java              # OpenAI provider config
+│   ├── MistralConfig.java             # Mistral AI provider config
+│   ├── JobRunrConfig.java             # JobRunr datasource config
+│   ├── ClaudeCodeAnthropicConfig.java # Anthropic config with OAuth fallback
+│   ├── ClaudeCodeOAuthProvider.java   # Reads Claude Code tokens from keychain
 │   ├── McpProperties.java            # MCP server config binding
 │   ├── McpClientManager.java         # MCP lifecycle management
 │   └── McpConfig.java                # Spring AI MCP auto-discovery
 ├── setup/
-│   ├── CredentialStore.java           # AES-256-GCM encrypted key store
+│   ├── CredentialStore.java           # AES-256-GCM encrypted key store (~/.agentrunr/)
+│   ├── WorkspaceInitializer.java      # Creates workspace dirs + copies default files
 │   ├── SetupRunner.java              # CLI first-run setup
 │   ├── SetupController.java          # Web setup API
 │   ├── SetupInterceptor.java         # Redirects to /setup if unconfigured
 │   └── SetupWebConfig.java           # Web config for setup flow
 ├── channel/
 │   ├── Channel.java                   # Channel interface (extensible)
+│   ├── RestChannel.java              # REST channel adapter
 │   ├── ChatController.java           # REST /api/chat + SSE streaming
-│   ├── TelegramChannel.java          # Telegram long-polling bot
+│   ├── TelegramChannel.java          # Telegram channel config
+│   ├── TelegramBotChannel.java       # Telegram long-polling implementation
 │   ├── AdminController.java          # Admin REST API
 │   ├── AgentConfigurer.java          # Runtime agent configuration
 │   └── ChannelRegistry.java          # Multi-channel management
@@ -559,12 +613,15 @@ io.agentrunr
 ├── cron/
 │   ├── CronService.java              # Agent-managed cron scheduling
 │   ├── CronJob.java                  # JobRunr job for scheduled tasks
+│   ├── CronController.java           # REST /api/cron endpoints
 │   ├── CronTools.java                # Agent tools for scheduling
 │   └── ScheduledTask.java            # Task record
 ├── tool/
 │   ├── BuiltInTools.java             # shell, file, web tools
 │   ├── SampleTools.java              # Example tools (weather, time)
+│   ├── MemoryTools.java              # Agent-callable memory tools
 │   ├── JobRunrToolExecutor.java      # Tool execution via JobRunr
+│   ├── ToolResultStore.java          # Stores async tool results
 │   └── ToolExecutionService.java     # Tool execution orchestration
 ├── memory/
 │   ├── Memory.java                    # Memory interface
@@ -572,8 +629,7 @@ io.agentrunr
 │   ├── MemoryEntry.java              # Memory record with BM25 score
 │   ├── SQLiteMemoryStore.java        # FTS5 primary store (brain.db)
 │   ├── FileMemoryStore.java          # Daily logs + context persistence
-│   ├── MemoryAutoSaver.java          # Passive fact extraction
-│   └── MemoryTools.java              # Agent-callable memory tools
+│   └── MemoryAutoSaver.java          # Passive fact extraction
 └── security/
     ├── SecurityConfig.java            # Spring Security config
     ├── ApiKeyFilter.java             # X-API-Key authentication
@@ -630,6 +686,12 @@ agent:
           Authorization: "Bearer ${MY_TOKEN:}"
         enabled: true
 ```
+
+## Inspiration
+
+AgentRunr was inspired by [OpenClaw](https://openclaw.ai), a Node.js personal AI agent runtime. OpenClaw pioneered the concept of a self-hosted agent that reads personality files (SOUL.md, IDENTITY.md), maintains persistent memory, and runs scheduled background tasks — all from a single runtime you control.
+
+AgentRunr brings those same ideas to the Java ecosystem: if you're running Spring Boot in production, you shouldn't need to drop into Node.js to get a capable local agent.
 
 ## Roadmap
 
