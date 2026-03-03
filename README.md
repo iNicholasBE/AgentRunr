@@ -11,7 +11,7 @@
 
 ## What Is AgentRunr?
 
-AgentRunr is a production-ready AI agent framework for Java. It ports [OpenAI Swarm](https://github.com/openai/swarm)'s lightweight agent orchestration pattern to the JVM, backed by Spring Boot for dependency injection, Spring AI for LLM abstraction, and JobRunr for persistent distributed task scheduling.
+AgentRunr is an AI agent framework for Java. It ports [OpenAI Swarm](https://github.com/openai/swarm)'s lightweight agent orchestration pattern to the JVM, backed by Spring Boot for dependency injection, Spring AI for LLM abstraction, and JobRunr for persistent distributed task scheduling.
 
 **Key differentiators:**
 - **Persistent memory** — SQLite with FTS5 full-text search, automatic fact extraction, and memory-aware system prompts
@@ -45,13 +45,11 @@ export JAVA_HOME=/path/to/java-21
 export PATH=$JAVA_HOME/bin:$PATH
 
 # 3. Configure (choose one method)
-# Option A: Environment variables
-export OPENAI_API_KEY=sk-...
 
-# Option B: Interactive setup
+# Option A: Interactive setup
 mvn spring-boot:run -Dspring-boot.run.arguments="--setup"
 
-# Option C: Web setup
+# Option B: Web setup
 mvn spring-boot:run
 # Visit http://localhost:8090/setup
 
