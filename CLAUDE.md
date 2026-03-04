@@ -10,19 +10,21 @@ AgentRunr is a Java-native AI agent runtime — a port of OpenAI Swarm's agent o
 
 | Component | Version | Notes |
 |-----------|---------|-------|
-| Java | 21 | Records, pattern matching, text blocks |
-| Spring Boot | 3.4.3 | |
-| Spring AI | 1.0.0 (GA) | Maven Central, no milestone repos needed |
+| Java | 25 | Records, pattern matching, text blocks, virtual threads |
+| Spring Boot | 4.0.3 | Jakarta EE 11, native images support |
+| Spring AI | 2.0.0-M2 | Milestone release with updated MCP support |
+| Jackson | 3.x | tools.jackson.* namespace (Jakarta) |
 | JobRunr | 8.4.2 | Background job scheduling |
-| MCP SDK | 0.10.0 | `io.modelcontextprotocol.sdk:mcp` |
-| SQLite | — | Memory (brain.db) + JobRunr (jobrunr.db) |
+| MCP SDK | 0.17.x | Jackson 3 support via mcp-json-jackson3 |
+| MCP Annotations | 0.8.0 | `org.springaicommunity:mcp-annotations` |
+| SQLite | 3.47.2.0 | Memory (brain.db) + JobRunr (jobrunr.db) |
 | Maven | 3.9+ | |
 
 ## Build & Run
 
 ```bash
-# Ensure Java 21+ is on PATH
-export JAVA_HOME=$(/usr/libexec/java_home -v 21 2>/dev/null || echo $JAVA_HOME)
+# Ensure Java 25 is on PATH
+export JAVA_HOME=$(/usr/libexec/java_home -v 25 2>/dev/null || echo $JAVA_HOME)
 export PATH=$JAVA_HOME/bin:$PATH
 
 # Build + test
@@ -32,7 +34,7 @@ mvn clean verify
 mvn spring-boot:run
 ```
 
-**You MUST export JAVA_HOME and PATH before running mvn.** The system default Java is not 21.
+**You MUST use Java 25.** Spring Boot 4.0 requires Java 21+, and this project uses Java 25 features.
 
 ## Project Structure
 
@@ -240,9 +242,10 @@ Added at runtime via `POST /api/mcp/servers`. Persisted in `CredentialStore` as:
 ### MCP Gotchas
 
 1. **URI resolution:** `URI.resolve("/sse")` with leading slash resets to root. `McpClientManager.parseSseUri()` handles this — URLs ending with `/sse` split into base + relative endpoint
-2. **SDK 0.10.0 constructors deprecated:** All public constructors of `HttpClientSseClientTransport` are deprecated. Use `HttpClientSseClientTransport.builder(baseUri)` with `.requestBuilder()` for custom headers
-3. **Credentials via env vars only** — Never hardcode in application.yml
-4. **Stdio transport** uses `ServerParameters.builder(command).args(...)` + `StdioClientTransport`
+2. **SDK 0.17.x with Jackson 3:** Uses `McpJsonMapper.getDefault()` for stdio transport. SSE transport auto-detects Jackson 3 via `mcp-json-jackson3` dependency.
+3. **MCP Annotations:** Spring AI 2.0.0-M2 requires `org.springaicommunity:mcp-annotations:0.8.0` explicitly declared due to missing SNAPSHOT dependency
+4. **Credentials via env vars only** — Never hardcode in application.yml
+5. **Stdio transport** uses `ServerParameters.builder(command).args(...)` + `StdioClientTransport(params, McpJsonMapper.getDefault())`
 
 ## ToolRegistry (3 Tiers)
 
@@ -277,18 +280,29 @@ Config: `agent.heartbeat.enabled`, `agent.heartbeat.interval-minutes`, `agent.he
 - `CronTools` registers three agent-callable tools: `schedule_task`, `list_scheduled_tasks`, `cancel_scheduled_task`
 - `CronJob` is the `@Job` that runs the agent with the stored message prompt
 
-## Spring AI 1.0.0 GA API Notes
+## Spring AI 2.0.0 & Spring Boot 4.0 Migration Notes
 
-These changed from M6 → GA. Don't use old patterns:
+### Spring Boot 4.0 Changes
+- **Java 21+ required** — This project uses Java 25
+- **Jakarta EE 11** — Namespace remains `jakarta.*` (already migrated in 3.x)
+- **Test starters split:**
+  - `spring-boot-starter-web` → `spring-boot-starter-webmvc`
+  - New: `spring-boot-starter-webmvc-test` required for `@WebMvcTest`, `@MockitoBean`
+- **JDK packages unchanged:** `javax.crypto.*`, `javax.sql.*` remain (not Jakarta)
 
-- `FunctionCallback` → `ToolCallback`
-- `callback.getName()` → `callback.getToolDefinition().name()`
-- Artifact IDs renamed:
-  - `spring-ai-openai-spring-boot-starter` → `spring-ai-starter-model-openai`
-  - `spring-ai-ollama-spring-boot-starter` → `spring-ai-starter-model-ollama`
-  - `spring-ai-anthropic-spring-boot-starter` → `spring-ai-starter-model-anthropic`
-  - `spring-ai-mcp-client-spring-boot-starter` → `spring-ai-starter-mcp-client`
-  - `spring-ai-mistralai-spring-boot-starter` → `spring-ai-starter-model-mistral-ai`
+### Jackson 3 Migration
+- **Import change:** `com.fasterxml.jackson.*` → `tools.jackson.*`
+- **API changes:**
+  - `.asString()` → `.stringValue()` (returns null if not text node)
+  - `.asInt()` → `.intValue()`
+  - `.asBoolean()` → `.booleanValue()` (no default parameter)
+  - `.fields()` → `.properties()` (returns Set, not Iterator)
+- **Spring uses Jackson 3** automatically in Spring Boot 4
+
+### Spring AI 2.0 Changes
+- Artifact naming unchanged (already using GA names)
+- **MistralAiApi constructor:** Now requires `RestClient.Builder`, `WebClient.Builder`, `ResponseErrorHandler`
+- **MCP SDK 0.17.x:** Uses `McpJsonMapper.getDefault()` for Jackson 3 support
 
 ## Configuration
 
@@ -311,8 +325,9 @@ Or use the interactive setup: run with `--setup` flag or visit `/setup` in brows
 mvn clean verify
 ```
 
-**Test gotchas:**
-- Tests using `@WebMvcTest` need `@MockBean` for `SQLiteMemoryStore`
+**Test gotchas (Spring Boot 4):**
+- Tests using `@WebMvcTest` need `spring-boot-starter-webmvc-test` dependency
+- Use `@MockitoBean` (not `@MockBean`) from `org.springframework.boot.test.mock.mockito`
 - `FileMemoryStore` uses `${memory.path}` (not `${agent.memory.path}`)
 - `AgentRunner` constructor takes `@Nullable SystemPromptBuilder`
 - `ChatController` depends on both `FileMemoryStore` and `SQLiteMemoryStore`
@@ -332,5 +347,6 @@ mvn clean verify
 
 - **DO NOT use Claude Code OAuth tokens** — Anthropic terms (updated 2026-02-19) explicitly prohibit use in other products/services. The `ClaudeCodeOAuthProvider` and `ClaudeCodeAnthropicConfig` exist but should not be enabled.
 - **DO NOT hardcode secrets** in application.yml or commit them
-- **DO NOT use `FunctionCallback`** — it's the old Spring AI M6 API, use `ToolCallback`
-- **DO NOT use Spring AI milestone repos** — 1.0.0 is GA in Maven Central
+- **DO NOT use Jackson 2 APIs** — Spring Boot 4 uses Jackson 3 (`tools.jackson.*`)
+- **DO NOT use `@MockBean`** — Spring Boot 4 renamed it to `@MockitoBean`
+- **DO NOT use Java < 21** — Spring Boot 4.0 requires Java 21+

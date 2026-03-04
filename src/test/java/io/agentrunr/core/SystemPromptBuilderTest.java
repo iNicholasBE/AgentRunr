@@ -1,6 +1,6 @@
 package io.agentrunr.core;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.agentrunr.memory.MemoryCategory;
 import io.agentrunr.memory.SQLiteMemoryStore;
 import org.junit.jupiter.api.AfterEach;

@@ -1,24 +1,22 @@
 package io.agentrunr.core;
 
+import io.agentrunr.config.ModelRouter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import io.agentrunr.config.ModelRouter;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.*;
-import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
-import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
-import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
-
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * The agent execution engine, inspired by OpenAI Swarm's core run loop.
@@ -49,10 +47,9 @@ public class AgentRunner {
 
     private final ModelRouter modelRouter;
     private final ToolRegistry toolRegistry;
-    private final @Nullable SystemPromptBuilder systemPromptBuilder;
+    private final SystemPromptBuilder systemPromptBuilder;
 
-    public AgentRunner(ModelRouter modelRouter, ToolRegistry toolRegistry,
-                       @Nullable SystemPromptBuilder systemPromptBuilder) {
+    public AgentRunner(ModelRouter modelRouter, ToolRegistry toolRegistry, SystemPromptBuilder systemPromptBuilder) {
         this.modelRouter = modelRouter;
         this.toolRegistry = toolRegistry;
         this.systemPromptBuilder = systemPromptBuilder;

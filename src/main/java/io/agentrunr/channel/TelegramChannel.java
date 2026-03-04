@@ -1,17 +1,21 @@
 package io.agentrunr.channel;
 
-import io.agentrunr.core.*;
+import io.agentrunr.core.Agent;
+import io.agentrunr.core.AgentContext;
+import io.agentrunr.core.AgentResponse;
+import io.agentrunr.core.AgentRunner;
+import io.agentrunr.core.ChatMessage;
 import io.agentrunr.memory.FileMemoryStore;
 import io.agentrunr.memory.SQLiteMemoryStore;
 import io.agentrunr.setup.CredentialStore;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -89,14 +93,14 @@ public class TelegramChannel implements Channel {
             String response = client.get().uri(url).retrieve().body(String.class);
 
             JsonNode root = objectMapper.readTree(response);
-            if (!root.path("ok").asBoolean()) {
+            if (!root.path("ok").booleanValue()) {
                 log.warn("Telegram API returned not OK: {}", response);
                 return;
             }
 
             JsonNode results = root.path("result");
             for (JsonNode update : results) {
-                lastUpdateId = update.path("update_id").asLong();
+                lastUpdateId = update.path("update_id").longValue();
                 handleUpdate(update);
             }
         } catch (Exception e) {
@@ -108,10 +112,10 @@ public class TelegramChannel implements Channel {
         JsonNode message = update.path("message");
         if (message.isMissingNode()) return;
 
-        long chatId = message.path("chat").path("id").asLong();
-        long userId = message.path("from").path("id").asLong();
-        String text = message.path("text").asText("");
-        String userName = message.path("from").path("first_name").asText("User");
+        long chatId = message.path("chat").path("id").longValue();
+        long userId = message.path("from").path("id").longValue();
+        String text = message.path("text").stringValue() != null ? message.path("text").stringValue() : "";
+        String userName = message.path("from").path("first_name").stringValue() != null ? message.path("from").path("first_name").stringValue() : "User";
 
         if (text.isBlank()) return;
 

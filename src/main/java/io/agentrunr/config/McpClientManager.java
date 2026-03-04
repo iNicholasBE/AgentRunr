@@ -1,6 +1,5 @@
 package io.agentrunr.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agentrunr.core.ToolRegistry;
 import io.agentrunr.setup.CredentialStore;
 import io.modelcontextprotocol.client.McpClient;
@@ -9,15 +8,16 @@ import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.spec.McpClientTransport;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Component;
+import tools.jackson.databind.ObjectMapper;
 
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -345,43 +345,52 @@ public class McpClientManager {
             if (serversNode == null || !serversNode.isArray()) return;
 
             for (var node : serversNode) {
-                String name = node.has("name") ? node.get("name").asText() : null;
+                String name = node.has("name") ? node.get("name").stringValue() : null;
                 if (name == null || name.isBlank()) continue;
                 if (servers.containsKey(name)) {
                     log.debug("Workspace MCP server '{}' already loaded, skipping", name);
                     continue;
                 }
 
-                boolean enabled = !node.has("enabled") || node.get("enabled").asBoolean(true);
+                boolean enabled = true; // default to enabled
+                if (node.has("enabled")) {
+                    var enabledNode = node.get("enabled");
+                    enabled = enabledNode.isBoolean() ? enabledNode.booleanValue() : true;
+                }
                 if (!enabled) {
                     log.debug("Workspace MCP server '{}' is disabled, skipping", name);
                     continue;
                 }
 
-                String transport = node.has("transport") ? node.get("transport").asText("sse") : "sse";
-                String url = node.has("url") ? node.get("url").asText(null) : null;
-                String password = node.has("password") ? node.get("password").asText(null) : null;
-                String command = node.has("command") ? node.get("command").asText(null) : null;
+                String transport = node.has("transport") ? node.get("transport").stringValue() : "sse";
+                if (transport == null) transport = "sse";
+                String url = node.has("url") ? node.get("url").stringValue() : null;
+                String password = node.has("password") ? node.get("password").stringValue() : null;
+                String command = node.has("command") ? node.get("command").stringValue() : null;
 
                 List<String> args = new ArrayList<>();
                 if (node.has("args") && node.get("args").isArray()) {
-                    for (var arg : node.get("args")) args.add(arg.asText());
+                    for (var arg : node.get("args")) args.add(arg.stringValue());
                 }
 
                 Map<String, String> headers = new java.util.HashMap<>();
                 if (node.has("headers") && node.get("headers").isObject()) {
-                    node.get("headers").fields().forEachRemaining(
-                            e -> headers.put(e.getKey(), e.getValue().asText()));
+                    var headerNode = node.get("headers");
+                    for (var entry : headerNode.properties()) {
+                        headers.put(entry.getKey(), entry.getValue().stringValue());
+                    }
                 }
 
                 Map<String, String> env = new java.util.HashMap<>();
                 if (node.has("env") && node.get("env").isObject()) {
-                    node.get("env").fields().forEachRemaining(
-                            e -> env.put(e.getKey(), e.getValue().asText()));
+                    var envNode = node.get("env");
+                    for (var entry : envNode.properties()) {
+                        env.put(entry.getKey(), entry.getValue().stringValue());
+                    }
                 }
 
                 int timeout = node.has("requestTimeoutSeconds")
-                        ? node.get("requestTimeoutSeconds").asInt(30) : 30;
+                        ? node.get("requestTimeoutSeconds").intValue() : 30;
 
                 var config = new McpProperties.McpServerConfig(
                         name, url, password, headers, true, transport,
@@ -482,7 +491,6 @@ public class McpClientManager {
                 .sseEndpoint(parts.sseEndpoint)
                 .clientBuilder(HttpClient.newBuilder())
                 .requestBuilder(requestBuilder)
-                .objectMapper(objectMapper)
                 .build();
     }
 
@@ -500,7 +508,10 @@ public class McpClientManager {
             paramsBuilder.env(config.env());
         }
 
-        return new StdioClientTransport(paramsBuilder.build(), objectMapper);
+        // Use the default Jackson 3 mapper from MCP SDK
+        return new StdioClientTransport(
+                paramsBuilder.build(),
+                io.modelcontextprotocol.json.McpJsonMapper.getDefault());
     }
 
     // --- Tool registration ---

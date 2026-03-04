@@ -1,6 +1,6 @@
 package io.agentrunr.tool;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.agentrunr.core.AgentResult;
 import io.agentrunr.core.ToolRegistry;
 import org.junit.jupiter.api.BeforeEach;

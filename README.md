@@ -28,12 +28,13 @@ Inspired by [OpenClaw](https://openclaw.ai) — a Node.js-based personal AI agen
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
-| Java | 21 | Records, pattern matching, text blocks |
-| Spring Boot | 3.4.3 | Application framework + DI |
-| Spring AI | 1.0.0 GA | LLM abstraction, tool calling, MCP client |
+| Java | 25 | Virtual threads, pattern matching, records |
+| Spring Boot | 4.0.3 | Application framework + DI (Jakarta EE 11) |
+| Spring AI | 2.0.0-M2 | LLM abstraction, tool calling, MCP client |
+| Jackson | 3.x | JSON processing (tools.jackson.* namespace) |
 | JobRunr | 8.4.2 | Persistent background jobs + cron scheduling |
-| MCP SDK | 0.10.0 | Model Context Protocol client (SSE + stdio) |
-| SQLite | — | Memory store (brain.db) + JobRunr storage |
+| MCP SDK | 0.17.x | Model Context Protocol client (SSE + stdio, Jackson 3) |
+| SQLite | 3.47.2.0 | Memory store (brain.db) + JobRunr storage |
 | Maven | 3.9+ | Build system |
 
 ## Quick Start
@@ -43,8 +44,8 @@ Inspired by [OpenClaw](https://openclaw.ai) — a Node.js-based personal AI agen
 git clone https://github.com/iNicholasBE/AgentRunr.git
 cd AgentRunr
 
-# 2. Set Java 21
-export JAVA_HOME=/path/to/java-21
+# 2. Set Java 25 (required for Spring Boot 4)
+export JAVA_HOME=/path/to/java-25
 export PATH=$JAVA_HOME/bin:$PATH
 
 # 3. Configure (choose one method)

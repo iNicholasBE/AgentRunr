@@ -1,6 +1,6 @@
 package io.agentrunr.cron;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.agentrunr.channel.AgentConfigurer;
 import io.agentrunr.channel.ChannelRegistry;
 import io.agentrunr.core.AgentContext;

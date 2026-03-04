@@ -6,11 +6,11 @@ import io.agentrunr.setup.CredentialStore;
 import io.agentrunr.security.InputSanitizer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import reactor.core.publisher.Flux;
 
@@ -28,22 +28,22 @@ class ChatControllerStreamTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
+    @MockitoBean
     private CredentialStore credentialStore;
 
-    @MockBean
+    @MockitoBean
     private AgentRunner agentRunner;
 
-    @MockBean
+    @MockitoBean
     private AgentConfigurer agentConfigurer;
 
-    @MockBean
+    @MockitoBean
     private FileMemoryStore memoryStore;
 
-    @MockBean
+    @MockitoBean
     private io.agentrunr.memory.SQLiteMemoryStore sqliteMemory;
 
-    @MockBean
+    @MockitoBean
     private io.agentrunr.memory.MemoryAutoSaver memoryAutoSaver;
 
     @Test

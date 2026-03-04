@@ -34,7 +34,13 @@ public class MistralConfig {
         }
 
         log.info("Creating Mistral AI chat model from credential store (model: {})", model);
-        MistralAiApi api = new MistralAiApi(apiKey);
+        MistralAiApi api = new MistralAiApi(
+                "https://api.mistral.ai",
+                apiKey,
+                org.springframework.web.client.RestClient.builder(),
+                org.springframework.web.reactive.function.client.WebClient.builder(),
+                org.springframework.ai.retry.RetryUtils.DEFAULT_RESPONSE_ERROR_HANDLER
+        );
         return MistralAiChatModel.builder()
                 .mistralAiApi(api)
                 .defaultOptions(MistralAiChatOptions.builder().model(model).build())
